@@ -8,8 +8,12 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.graphics.BitmapFactory;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -22,6 +26,8 @@ import android.util.Base64;
 import android.util.Patterns;
 import android.webkit.MimeTypeMap;
 import android.content.pm.PackageManager;
+import android.content.ContentResolver;
+import android.util.Log;
 
 import com.facebook.react.ReactActivity;
 import com.facebook.react.bridge.ActivityEventListener;
@@ -39,6 +45,7 @@ import com.imagepicker.utils.UI;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -47,6 +54,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.util.List;
+
+import net.ypresto.androidtranscoder.MediaTranscoder;
+import net.ypresto.androidtranscoder.format.MediaFormatStrategy;
 
 import com.facebook.react.modules.core.PermissionListener;
 
@@ -244,6 +254,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
       {
         cameraIntent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, videoDurationLimit);
       }
+
     }
     else
     {
@@ -355,7 +366,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
   }
 
   @Override
-  public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+  public void onActivityResult(Activity activity, int requestCode, int resultCode, final Intent data) {
     //robustness code
     if (passResult(requestCode))
     {
@@ -406,20 +417,70 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
         imageConfig = imageConfig.withOriginalFile(new File(realPath));
         break;
 
-      case REQUEST_LAUNCH_VIDEO_LIBRARY:
+/*      case REQUEST_LAUNCH_VIDEO_LIBRARY:
         responseHelper.putString("uri", data.getData().toString());
         responseHelper.putString("path", getRealPathFromURI(data.getData()));
         responseHelper.invokeResponse(callback);
         callback = null;
         return;
-
+ */
+      case REQUEST_LAUNCH_VIDEO_LIBRARY:
       case REQUEST_LAUNCH_VIDEO_CAPTURE:
-        final String path = getRealPathFromURI(data.getData());
-        responseHelper.putString("uri", data.getData().toString());
-        responseHelper.putString("path", path);
-        fileScan(reactContext, path);
-        responseHelper.invokeResponse(callback);
-        callback = null;
+        try {
+            ContentResolver resolver = activity.getContentResolver();
+            ParcelFileDescriptor parcelFileIn = resolver.openFileDescriptor(data.getData(), "r");
+            FileDescriptor fileIn = parcelFileIn.getFileDescriptor();
+            final File fileOut = File.createTempFile("video_", ".mp4", activity.getCacheDir());
+//                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES));
+            MediaTranscoder.Listener listener = new MediaTranscoder.Listener() {
+                @Override
+                public void onTranscodeProgress(double progress) 
+                { }
+                @Override
+                public void onTranscodeCompleted() {
+                    finishVideoProcessing(Uri.fromFile(fileOut));
+                }
+                @Override
+                public void onTranscodeCanceled() {
+                    finishVideoProcessing(data.getData());
+                }
+                @Override
+                public void onTranscodeFailed(Exception exception) {
+                    finishVideoProcessing(data.getData());
+                }
+            };
+            MediaTranscoder.getInstance().transcodeVideo(
+                fileIn, fileOut.getAbsolutePath(),
+                new MediaFormatStrategy() {
+                    @Override
+                    public MediaFormat createVideoOutputFormat(MediaFormat inputFormat) {
+                        //Log.d("XXX", "inputFormat " + inputFormat);
+                        int width = inputFormat.getInteger(MediaFormat.KEY_WIDTH);
+                        int height = inputFormat.getInteger(MediaFormat.KEY_HEIGHT);
+                        MediaFormat outputFormat = MediaFormat.createVideoFormat("video/avc", width, height);
+                        outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, 5500 * 1000);
+                        outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+                        outputFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
+                        outputFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+                        //Log.d("XXX", "outputFormat " + outputFormat);
+                        return outputFormat;
+                    }
+                    @Override
+                    public MediaFormat createAudioOutputFormat(MediaFormat inputFormat) {
+                        return null;
+                    }
+                },
+                listener);
+        }
+        catch (Exception e) {
+            finishVideoProcessing(data.getData());
+        }
+   //     final String path = getRealPathFromURI(data.getData());
+   //     responseHelper.putString("uri", data.getData().toString());
+   //     responseHelper.putString("path", path);
+   //     fileScan(reactContext, path);
+   //     responseHelper.invokeResponse(callback);
+   //     callback = null;
         return;
     }
 
@@ -721,4 +782,13 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
       videoDurationLimit = options.getInt("durationLimit");
     }
   }
+
+    private void finishVideoProcessing(Uri uri) {
+        final String path = getRealPathFromURI(uri);
+        responseHelper.putString("uri", uri.toString());
+        responseHelper.putString("path", path);
+        fileScan(reactContext, path);
+        responseHelper.invokeResponse(callback);
+        callback = null;
+    }
 }
