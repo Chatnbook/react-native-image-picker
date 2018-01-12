@@ -25,7 +25,7 @@ module.exports = {
       callback = options;
       options = {};
     }
-    this.addListenerOn(DeviceEventEmitter, 'willStartTranscoding', () => {
+    DeviceEventEmitter.addListener('willStartTranscoding', () => {
         if (callback) {
             callback({ willStartTranscoding: true });
         }
