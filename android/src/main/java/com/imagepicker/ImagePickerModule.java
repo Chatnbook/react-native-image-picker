@@ -452,17 +452,41 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
             MediaTranscoder.getInstance().transcodeVideo(
                 fileIn, fileOut.getAbsolutePath(),
                 new MediaFormatStrategy() {
+                    private float getResizeRatio(float w, float h) {
+                        if (w < h) {
+                            float t = w; w = h; h = t;
+                        }
+                        float ret = 1.0f;
+                        while ((w > 1280.0f) || (h > 720.0f)) {
+                            if (w > 1280.0f) {
+                                float r = 1280.0f / w;
+                                w *= r;
+                                h *= r;
+                                ret *= r;
+                            }
+                            if (h > 720.0f) {
+                                float r = 720.0f / h;
+                                w *= r;
+                                h *= r;
+                                ret *= r;
+                            }
+                        } 
+                        return ret;
+                    }
                     @Override
                     public MediaFormat createVideoOutputFormat(MediaFormat inputFormat) {
-                        //Log.d("XXX", "inputFormat " + inputFormat);
+//                        Log.d("XXX", "inputFormat " + inputFormat);
                         int width = inputFormat.getInteger(MediaFormat.KEY_WIDTH);
                         int height = inputFormat.getInteger(MediaFormat.KEY_HEIGHT);
+                        float r = getResizeRatio(width, height);
+                        width *= r;
+                        height *= r;
                         MediaFormat outputFormat = MediaFormat.createVideoFormat("video/avc", width, height);
                         outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, 5500 * 1000);
                         outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
                         outputFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
                         outputFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-                        //Log.d("XXX", "outputFormat " + outputFormat);
+//                        Log.d("XXX", "outputFormat " + outputFormat);
                         return outputFormat;
                     }
                     @Override
