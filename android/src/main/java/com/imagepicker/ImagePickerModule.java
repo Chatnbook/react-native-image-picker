@@ -36,6 +36,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.imagepicker.media.ImageConfig;
 import com.imagepicker.permissions.PermissionUtils;
 import com.imagepicker.permissions.OnImagePickerPermissionsCallback;
@@ -449,6 +450,8 @@ public class ImagePickerModule extends ReactContextBaseJavaModule
                     finishVideoProcessing(data.getData());
                 }
             };
+            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("willStartTranscoding", null);
             MediaTranscoder.getInstance().transcodeVideo(
                 fileIn, fileOut.getAbsolutePath(),
                 new MediaFormatStrategy() {
